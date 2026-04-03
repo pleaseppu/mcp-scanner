@@ -115,7 +115,7 @@ Suitable for direct integration into CI/CD pipelines.
 | VirusTotal malicious 1–2 | Review | +15 |
 | Semgrep ERROR | Review | +5 each |
 | Bandit HIGH | Review | +4 each |
-| Cisco YARA HIGH | Reject | +8 each |
+| Cisco YARA HIGH+ (incl. CRITICAL) | Reject | +8 each |
 | Cisco YARA MEDIUM | Review | +5 each |
 | AI verdict: Reject | Reject | +20 |
 | AI verdict: Review Needed | Review | +10 |
@@ -144,6 +144,8 @@ Runs four passes; results are deduplicated and merged:
 2. **Obfuscation detection** (`rules/obfuscation.yaml`) — base64/zlib/gzip + eval, chained compile
 3. **p/secrets** (Semgrep registry) — API keys, tokens, passwords
 4. **p/typescript** (only when `.ts`/`.js` files are detected)
+
+> **Note**: `p/secrets` and `p/typescript` require network access to semgrep.dev registry. In air-gapped CI/CD environments these two passes are skipped; the other passes are unaffected.
 
 ### Bandit (Python Security Analysis)
 

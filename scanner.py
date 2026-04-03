@@ -14,6 +14,7 @@ import argparse
 import os
 import sys
 import textwrap
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -559,60 +560,78 @@ def cmd_scan(args):
     # ── Trivy ──────────────────────────────────────────────────────────────────
     if "trivy" not in skip:
         console.print("\n[bold]執行 Trivy...[/bold]", end=" ")
+        _t0 = time.perf_counter()
         trivy_res = run_trivy(info.extract_dir)
+        trivy_ms = int((time.perf_counter() - _t0) * 1000)
         status = "[green]完成[/green]" if trivy_res.available and not trivy_res.error else f"[yellow]{trivy_res.error or '無法使用'}[/yellow]"
         console.print(status)
     else:
+        trivy_ms = -1
         from modules.trivy import TrivyResult
         trivy_res = TrivyResult(available=False, error="已略過", vulns=[])
 
     # ── VirusTotal ─────────────────────────────────────────────────────────────
     if "virustotal" not in skip:
         console.print("[bold]執行 VirusTotal...[/bold]", end=" ")
+        _t0 = time.perf_counter()
         vt_res = scan_virustotal(info.file_path, info.sha256, vt_key)
+        vt_ms = int((time.perf_counter() - _t0) * 1000)
         status = "[green]完成[/green]" if vt_res.available else f"[yellow]{vt_res.error}[/yellow]"
         console.print(status)
     else:
+        vt_ms = -1
         from modules.virustotal import VTResult
         vt_res = VTResult(available=False, error="已略過", sha256=info.sha256, found=False)
 
     # ── Semgrep (multi-pass) ───────────────────────────────────────────────────
     if "semgrep" not in skip:
         console.print("[bold]執行 Semgrep（多輪掃描）...[/bold]", end=" ")
+        _t0 = time.perf_counter()
         semgrep_res = run_semgrep(info.extract_dir, RULES_PATH, OBFUSCATION_RULES_PATH)
+        semgrep_ms = int((time.perf_counter() - _t0) * 1000)
         status = "[green]完成[/green]" if semgrep_res.available else f"[yellow]{semgrep_res.error or '無法使用'}[/yellow]"
         console.print(status)
     else:
+        semgrep_ms = -1
         from modules.semgrep import SemgrepResult
         semgrep_res = SemgrepResult(available=False, error="已略過", findings=[])
 
     # ── Bandit ─────────────────────────────────────────────────────────────────
     if "bandit" not in skip:
         console.print("[bold]執行 Bandit...[/bold]", end=" ")
+        _t0 = time.perf_counter()
         bandit_res = run_bandit(info.extract_dir)
+        bandit_ms = int((time.perf_counter() - _t0) * 1000)
         status = "[green]完成[/green]" if bandit_res.available and not bandit_res.error else f"[yellow]{bandit_res.error or '無法使用'}[/yellow]"
         console.print(status)
     else:
+        bandit_ms = -1
         from modules.bandit import BanditResult
         bandit_res = BanditResult(available=False, error="已略過", findings=[])
 
     # ── Cisco MCP Scanner ──────────────────────────────────────────────────────
     if "cisco" not in skip:
         console.print("[bold]執行 Cisco MCP Scanner...[/bold]", end=" ")
+        _t0 = time.perf_counter()
         cisco_res = run_cisco_scanner(info.extract_dir, info.manifest)
+        cisco_ms = int((time.perf_counter() - _t0) * 1000)
         status = "[green]完成[/green]" if cisco_res.available and not cisco_res.error else f"[yellow]{cisco_res.error or '無法使用'}[/yellow]"
         console.print(status)
     else:
+        cisco_ms = -1
         from modules.cisco_scanner import CiscoResult
         cisco_res = CiscoResult(available=False, error="已略過")
 
     # ── AI 審查 ────────────────────────────────────────────────────────────────
     if "ai" not in skip:
         console.print("[bold]執行 AI 審查...[/bold]", end=" ")
+        _t0 = time.perf_counter()
         ai_res = ai_review(info.manifest, info.source_files, info.extract_dir, maisy_url, maisy_key, maisy_model)
+        ai_ms = int((time.perf_counter() - _t0) * 1000)
         status = "[green]完成[/green]" if ai_res.available and not ai_res.error else f"[yellow]{ai_res.error or '無法使用'}[/yellow]"
         console.print(status)
     else:
+        ai_ms = -1
         from modules.ai_review import AIReviewResult
         ai_res = AIReviewResult(available=False, error="已略過", content="", model=maisy_model, input_tokens=0, output_tokens=0, duration_ms=0)
 
@@ -626,6 +645,19 @@ def cmd_scan(args):
 
     verdict, vcolor = compute_risk(trivy_res, vt_res, semgrep_res, bandit_res, ai_res, cisco_res)
     print_verdict(verdict, vcolor, info)
+
+    # ── 掃描耗時統計 ────────────────────────────────────────────────────────────
+    console.print()
+    console.print(Rule("[dim]掃描耗時[/dim]", style="dim"))
+    timing_table = Table(box=box.SIMPLE, show_header=False, padding=(0, 1))
+    timing_table.add_column(style="dim", width=20)
+    timing_table.add_column(style="dim", justify="right")
+    for _label, _ms in [
+        ("Trivy", trivy_ms), ("VirusTotal", vt_ms), ("Semgrep", semgrep_ms),
+        ("Bandit", bandit_ms), ("Cisco", cisco_ms), ("AI Review", ai_ms),
+    ]:
+        timing_table.add_row(_label, f"{_ms:,} ms" if _ms >= 0 else "略過")
+    console.print(timing_table)
 
     if output:
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
