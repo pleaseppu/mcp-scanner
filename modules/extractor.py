@@ -76,9 +76,9 @@ def extract_mcpb(mcpb_path: str) -> McpbInfo:
         raise ValueError("manifest.json not found in MCPB")
 
     manifest_size = manifest_path.stat().st_size
-    if manifest_size > 1 * 1024 * 1024:  # 1 MB 上限
+    if manifest_size > 64 * 1024:  # 64 KB 上限
         shutil.rmtree(extract_dir, ignore_errors=True)
-        raise ValueError(f"manifest.json 過大（{manifest_size} bytes）")
+        raise ValueError(f"manifest.json 過大（{manifest_size} bytes，上限 64 KB）")
 
     manifest = json.loads(manifest_path.read_text())
 

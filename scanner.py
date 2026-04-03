@@ -90,11 +90,13 @@ def compute_risk(trivy, vt, semgrep, bandit, ai, cisco) -> tuple[str, str]:
         review_score += cisco.medium_count * 5
 
     if ai.available and ai.content:
-        lower = ai.content.lower()
-        if "拒絕" in lower or "reject" in lower:
-            reject_score += 20
-        elif "需要審查" in lower or "review needed" in lower:
-            review_score += 10
+        for line in reversed(ai.content.splitlines()):
+            if line.strip().startswith("結論："):
+                if "拒絕" in line:
+                    reject_score += 20
+                elif "需要審查" in line:
+                    review_score += 10
+                break
 
     if reject_score >= 10:
         return "拒絕", "bold red"
