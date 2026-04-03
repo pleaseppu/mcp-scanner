@@ -546,7 +546,10 @@ def cmd_scan(args):
     console.print(f"  版本     : {m.get('version', '?')}")
     console.print(f"  作者     : {m.get('author', {}).get('name', '?')}")
     console.print(f"  SHA256   : {info.sha256}")
-    console.print(f"  原始碼   : {len(info.source_files)} 個 .py 檔案")
+    py_count = sum(1 for f in info.source_files if f.suffix == ".py")
+    js_count = len(info.source_files) - py_count
+    src_summary = f"{py_count} 個 .py ｜ {js_count} 個 .js/.ts" if js_count else f"{py_count} 個 .py"
+    console.print(f"  原始碼   : {src_summary}")
 
     vt_key = os.getenv("VIRUSTOTAL_API_KEY", "")
     maisy_url = os.getenv("MAISY_API_URL", "")

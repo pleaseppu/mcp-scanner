@@ -111,3 +111,48 @@ rules:
     message: "Writing to system path — potential privilege escalation"
     languages: [python]
     severity: ERROR
+
+  # ── JavaScript / TypeScript ─────────────────────────────────────────────────
+
+  - id: mcpb-js-hardcoded-secret
+    patterns:
+      - pattern-either:
+          - pattern: const $VAR = "$SECRET"
+          - pattern: let $VAR = "$SECRET"
+          - pattern: var $VAR = "$SECRET"
+      - metavariable-regex:
+          metavariable: $VAR
+          regex: (?i)(api_?key|secret|token|password|auth|credential)
+      - metavariable-regex:
+          metavariable: $SECRET
+          regex: .{8,}
+    message: "Possible hardcoded secret in variable '$VAR'"
+    languages: [javascript, typescript]
+    severity: ERROR
+
+  - id: mcpb-js-hardcoded-bearer
+    pattern: |
+      "Authorization": "Bearer $TOKEN"
+    message: "Hardcoded Bearer token in source"
+    languages: [javascript, typescript]
+    severity: ERROR
+
+  - id: mcpb-js-child-process
+    pattern: require("child_process")
+    message: "child_process usage — potential arbitrary command execution"
+    languages: [javascript, typescript]
+    severity: WARNING
+
+  - id: mcpb-js-process-env-spread
+    pattern-either:
+      - pattern: "{...process.env}"
+      - pattern: Object.assign({}, process.env)
+    message: "Copying entire process.env — potential credential harvesting"
+    languages: [javascript, typescript]
+    severity: ERROR
+
+  - id: mcpb-js-axios-post
+    pattern: axios.post($URL, ...)
+    message: "Outbound HTTP POST via axios — verify endpoint is expected"
+    languages: [javascript, typescript]
+    severity: WARNING

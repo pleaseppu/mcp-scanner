@@ -82,8 +82,15 @@ def extract_mcpb(mcpb_path: str) -> McpbInfo:
 
     manifest = json.loads(manifest_path.read_text())
 
-    # Collect Python source files
-    source_files = sorted(extract_dir.rglob("*.py"))
+    # Collect source files — Python and JavaScript/TypeScript
+    # Skip generated / vendor directories to avoid noise
+    _SKIP_DIRS = frozenset({"node_modules", "dist", "build", ".next", "__pycache__"})
+    source_files = sorted(
+        f
+        for pattern in ("*.py", "*.js", "*.ts", "*.mjs", "*.cjs", "*.jsx", "*.tsx")
+        for f in extract_dir.rglob(pattern)
+        if not any(part in _SKIP_DIRS for part in f.relative_to(extract_dir).parts)
+    )
 
     # Collect dependency definition files
     dep_files = []

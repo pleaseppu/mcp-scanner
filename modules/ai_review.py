@@ -100,7 +100,13 @@ def _build_prompt(manifest: dict, source_files: list[Path], extract_dir: Path) -
             continue
 
         rel = src.relative_to(extract_dir)
-        snippet = f"\n## {rel}\n```python\n{code}\n```\n"
+        _EXT_LANG = {
+            ".ts": "typescript", ".tsx": "typescript",
+            ".js": "javascript", ".mjs": "javascript",
+            ".cjs": "javascript", ".jsx": "javascript",
+        }
+        lang = _EXT_LANG.get(src.suffix, "python")
+        snippet = f"\n## {rel}\n```{lang}\n{code}\n```\n"
 
         if total_chars + len(snippet) > _MAX_SOURCE_CHARS:
             parts.append(f"\n## {rel}\n[truncated — context limit reached]\n")

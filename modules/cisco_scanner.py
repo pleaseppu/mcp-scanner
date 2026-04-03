@@ -11,12 +11,25 @@ from __future__ import annotations
 
 import ast
 import json
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
+
+
+# Regex patterns for JS/TS tool description extraction
+# Pattern 1: .tool("name", "description", ...) — MCP SDK style
+_RE_TOOL_CALL = re.compile(
+    r'\.tool\s*\(\s*(?P<q1>["\'])(?P<name>[^"\']{1,100})(?P=q1)'
+    r'\s*,\s*(?P<q2>["\'])(?P<desc>[^"\']{20,4000})(?P=q2)',
+)
+# Pattern 2: description: "..." — object literal style
+_RE_DESC_FIELD = re.compile(
+    r'\bdescription\s*:\s*(?P<q>["\'])(?P<desc>[^"\']{20,4000})(?P=q)',
+)
 
 
 # python3.11 是 cisco mcp-scanner 的相容版本
@@ -108,6 +121,56 @@ def _extract_tool_descriptions(extract_dir: Path, manifest: dict) -> list[dict]:
     return tools
 
 
+def _extract_tool_descriptions_js(extract_dir: Path) -> list[dict]:
+    """Regex-based tool description extraction from JS/TS source files."""
+    tools: list[dict] = []
+    _MAX_TOOLS = 2000
+    _MAX_DESC_CHARS = 4000
+    _SKIP_DIRS = frozenset({"node_modules", "dist", "build", ".next", "__pycache__"})
+    seen_descs: set[str] = set()
+
+    for pattern in ("*.js", "*.ts", "*.mjs", "*.cjs", "*.jsx", "*.tsx"):
+        for js_file in sorted(extract_dir.rglob(pattern)):
+            if len(tools) >= _MAX_TOOLS:
+                return tools
+            if any(part in _SKIP_DIRS for part in js_file.relative_to(extract_dir).parts):
+                continue
+            try:
+                source = js_file.read_text(errors="replace")
+            except OSError:
+                continue
+
+            stem = js_file.stem
+
+            # .tool("name", "description") — MCP SDK pattern
+            for m in _RE_TOOL_CALL.finditer(source):
+                if len(tools) >= _MAX_TOOLS:
+                    return tools
+                desc = m.group("desc")
+                if desc not in seen_descs:
+                    seen_descs.add(desc)
+                    tools.append({
+                        "name": f"{stem}.{m.group('name')}",
+                        "description": desc[:_MAX_DESC_CHARS],
+                        "inputSchema": {"type": "object", "properties": {}},
+                    })
+
+            # description: "..." — object literal pattern
+            for m in _RE_DESC_FIELD.finditer(source):
+                if len(tools) >= _MAX_TOOLS:
+                    return tools
+                desc = m.group("desc")
+                if desc not in seen_descs:
+                    seen_descs.add(desc)
+                    tools.append({
+                        "name": f"{stem}.description",
+                        "description": desc[:_MAX_DESC_CHARS],
+                        "inputSchema": {"type": "object", "properties": {}},
+                    })
+
+    return tools
+
+
 def run_cisco_scanner(extract_dir: Path, manifest: dict) -> CiscoResult:
     # 確認 cisco mcp-scanner 是否可用
     try:
@@ -120,8 +183,9 @@ def run_cisco_scanner(extract_dir: Path, manifest: dict) -> CiscoResult:
     except Exception as e:
         return CiscoResult(available=False, error=f"無法確認 cisco mcp-scanner：{e}")
 
-    # 建立暫時的 tools.json
+    # 建立暫時的 tools.json（Python AST + JS/TS regex 兩路提取）
     tools = _extract_tool_descriptions(extract_dir, manifest)
+    tools.extend(_extract_tool_descriptions_js(extract_dir))
     if not tools:
         return CiscoResult(available=True, error=None, findings=[])
 
