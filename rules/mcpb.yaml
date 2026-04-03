@@ -1,0 +1,113 @@
+rules:
+
+  # ── Hardcoded secrets ──────────────────────────────────────────────────────
+
+  - id: mcpb-hardcoded-api-key
+    patterns:
+      - pattern: $VAR = "$SECRET"
+      - metavariable-regex:
+          metavariable: $VAR
+          regex: (?i)(api_?key|secret|token|password|passwd|auth|credential)
+      - metavariable-regex:
+          metavariable: $SECRET
+          regex: .{8,}
+    message: "Possible hardcoded secret in variable '$VAR'"
+    languages: [python]
+    severity: ERROR
+
+  - id: mcpb-hardcoded-bearer-token
+    pattern: |
+      "Authorization": "Bearer $TOKEN"
+    message: "Hardcoded Bearer token in source"
+    languages: [python]
+    severity: ERROR
+
+  # ── Dangerous execution ────────────────────────────────────────────────────
+
+  - id: mcpb-subprocess-shell-true
+    patterns:
+      - pattern: subprocess.run(..., shell=True, ...)
+      - pattern: subprocess.call(..., shell=True, ...)
+      - pattern: subprocess.Popen(..., shell=True, ...)
+    message: "subprocess called with shell=True — command injection risk"
+    languages: [python]
+    severity: ERROR
+
+  - id: mcpb-os-system
+    pattern: os.system(...)
+    message: "os.system() allows arbitrary shell command execution"
+    languages: [python]
+    severity: ERROR
+
+  - id: mcpb-dynamic-import
+    pattern: __import__(...)
+    message: "Dynamic import can load arbitrary modules"
+    languages: [python]
+    severity: WARNING
+
+  # ── Data exfiltration ──────────────────────────────────────────────────────
+
+  - id: mcpb-requests-post-external
+    patterns:
+      - pattern: requests.post($URL, ...)
+      - pattern: httpx.post($URL, ...)
+    message: "Outbound HTTP POST — verify endpoint is expected"
+    languages: [python]
+    severity: WARNING
+
+  - id: mcpb-socket-connect
+    pattern: $SOCK.connect(($HOST, $PORT))
+    message: "Raw socket connection — potential data exfiltration channel"
+    languages: [python]
+    severity: WARNING
+
+  # ── Credential harvesting ──────────────────────────────────────────────────
+
+  - id: mcpb-environ-mass-harvest
+    pattern: dict(os.environ)
+    message: "Copying entire os.environ — potential credential harvesting"
+    languages: [python]
+    severity: ERROR
+
+  - id: mcpb-environ-items
+    pattern: os.environ.items()
+    message: "Iterating all environment variables — review if necessary"
+    languages: [python]
+    severity: WARNING
+
+  # ── Prompt injection ───────────────────────────────────────────────────────
+
+  - id: mcpb-prompt-injection-ignore
+    pattern-regex: '(?i)ignore\s+(previous|prior|above|all)\s+(instructions|prompt|rules|context)'
+    message: "Possible prompt injection: 'ignore previous instructions' pattern in string"
+    languages: [python]
+    severity: ERROR
+
+  # ── Unsafe deserialization ─────────────────────────────────────────────────
+
+  - id: mcpb-unsafe-deserialize
+    patterns:
+      - pattern: pickle.$METHOD(...)
+      - metavariable-regex:
+          metavariable: $METHOD
+          regex: (loads|load|Unpickler)
+    message: "Unsafe deserialization — can execute arbitrary code on untrusted input"
+    languages: [python]
+    severity: ERROR
+
+  - id: mcpb-marshal-loads
+    pattern: marshal.loads(...)
+    message: "Unsafe deserialization via marshal module"
+    languages: [python]
+    severity: ERROR
+
+  # ── File system risk ───────────────────────────────────────────────────────
+
+  - id: mcpb-write-to-system-path
+    patterns:
+      - pattern: open("/etc/...", ...)
+      - pattern: open("/usr/...", ...)
+      - pattern: open("/bin/...", ...)
+    message: "Writing to system path — potential privilege escalation"
+    languages: [python]
+    severity: ERROR

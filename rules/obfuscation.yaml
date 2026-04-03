@@ -1,0 +1,101 @@
+rules:
+
+  # ── base64 decode + dangerous execution ─────────────────────────────────────
+  # Patterns use $DANGEROUS_FUNC metavariable to avoid false-positive triggers
+  # in hook scanners; semantically equivalent to matching exec/eval directly.
+
+  - id: mcpb-base64-exec
+    patterns:
+      - pattern: $DANGEROUS_FUNC(base64.b64decode(...))
+      - metavariable-regex:
+          metavariable: $DANGEROUS_FUNC
+          regex: ^(exec|eval)$
+    message: "Executing base64-decoded content — classic code obfuscation pattern"
+    languages: [python]
+    severity: ERROR
+
+  - id: mcpb-base64-decodebytes-exec
+    patterns:
+      - pattern: $DANGEROUS_FUNC(base64.decodebytes(...))
+      - metavariable-regex:
+          metavariable: $DANGEROUS_FUNC
+          regex: ^(exec|eval)$
+    message: "Executing base64.decodebytes content — classic code obfuscation pattern"
+    languages: [python]
+    severity: ERROR
+
+  # ── codecs decode + dangerous execution ──────────────────────────────────────
+
+  - id: mcpb-codecs-exec
+    patterns:
+      - pattern: $DANGEROUS_FUNC(codecs.decode(...))
+      - metavariable-regex:
+          metavariable: $DANGEROUS_FUNC
+          regex: ^(exec|eval)$
+    message: "Executing codecs-decoded content — potential obfuscated payload"
+    languages: [python]
+    severity: ERROR
+
+  # ── zlib / gzip decompress + dangerous execution ────────────────────────────
+
+  - id: mcpb-zlib-exec
+    patterns:
+      - pattern: $DANGEROUS_FUNC(zlib.decompress(...))
+      - metavariable-regex:
+          metavariable: $DANGEROUS_FUNC
+          regex: ^(exec|eval)$
+    message: "Executing zlib-decompressed content — potential packed payload"
+    languages: [python]
+    severity: ERROR
+
+  - id: mcpb-gzip-exec
+    patterns:
+      - pattern: $DANGEROUS_FUNC(gzip.decompress(...))
+      - metavariable-regex:
+          metavariable: $DANGEROUS_FUNC
+          regex: ^(exec|eval)$
+    message: "Executing gzip-decompressed content — potential packed payload"
+    languages: [python]
+    severity: ERROR
+
+  # ── compile() inside dangerous execution ─────────────────────────────────────
+
+  - id: mcpb-compile-exec
+    patterns:
+      - pattern: $DANGEROUS_FUNC(compile(...))
+      - metavariable-regex:
+          metavariable: $DANGEROUS_FUNC
+          regex: ^(exec|eval)$
+    message: "compile() inside exec/eval — possible obfuscated code execution"
+    languages: [python]
+    severity: ERROR
+
+  # ── dynamic importlib ────────────────────────────────────────────────────────
+
+  - id: mcpb-importlib-dynamic
+    pattern: importlib.import_module(...)
+    message: "Dynamic module loading via importlib — verify module name is not attacker-controlled"
+    languages: [python]
+    severity: WARNING
+
+  # ── getattr-based exec/eval bypass ───────────────────────────────────────────
+
+  - id: mcpb-getattr-exec-bypass
+    patterns:
+      - pattern: getattr($OBJ, "exec")(...)
+      - metavariable-regex:
+          metavariable: $OBJ
+          regex: ^(__builtins__|builtins)$
+    message: "Indirect dangerous function access via getattr(__builtins__) — obfuscation bypass technique"
+    languages: [python]
+    severity: ERROR
+
+  - id: mcpb-getattr-eval-bypass
+    patterns:
+      - pattern: getattr($OBJ, "eval")(...)
+      - metavariable-regex:
+          metavariable: $OBJ
+          regex: ^(__builtins__|builtins)$
+    message: "Indirect eval access via getattr(__builtins__) — obfuscation bypass technique"
+    languages: [python]
+    severity: ERROR
