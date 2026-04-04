@@ -156,3 +156,109 @@ rules:
     message: "Outbound HTTP POST via axios — verify endpoint is expected"
     languages: [javascript, typescript]
     severity: WARNING
+
+  # ── SSRF (Server-Side Request Forgery) ─────────────────────────────────────
+
+  - id: mcpb-ssrf-requests-get
+    patterns:
+      - pattern: requests.get($URL, ...)
+      - pattern-not: requests.get("...", ...)
+    message: "requests.get() with dynamic URL — SSRF risk if URL is attacker-controlled"
+    languages: [python]
+    severity: WARNING
+
+  - id: mcpb-ssrf-httpx-get
+    patterns:
+      - pattern: httpx.get($URL, ...)
+      - pattern-not: httpx.get("...", ...)
+    message: "httpx.get() with dynamic URL — SSRF risk if URL is attacker-controlled"
+    languages: [python]
+    severity: WARNING
+
+  - id: mcpb-ssrf-urllib
+    patterns:
+      - pattern-either:
+          - pattern: urllib.request.urlopen($URL)
+          - pattern: urllib.request.urlopen($URL, ...)
+      - pattern-not: urllib.request.urlopen("...", ...)
+    message: "urllib.request.urlopen() with dynamic URL — SSRF risk"
+    languages: [python]
+    severity: WARNING
+
+  - id: mcpb-ssrf-requests-post-dynamic
+    patterns:
+      - pattern: requests.post($URL, ...)
+      - pattern-not: requests.post("...", ...)
+    message: "requests.post() with dynamic URL — SSRF risk if URL is attacker-controlled"
+    languages: [python]
+    severity: WARNING
+
+  # ── DNS Rebinding ───────────────────────────────────────────────────────────
+
+  - id: mcpb-dns-rebinding-internal-url
+    pattern-regex: '(https?://(localhost|127\.0\.0\.1|0\.0\.0\.0|::1|169\.254\.[0-9]+\.[0-9]+|10\.[0-9]+\.[0-9]+\.[0-9]+|192\.168\.[0-9]+\.[0-9]+|172\.(1[6-9]|2[0-9]|3[01])\.[0-9]+\.[0-9]+))'
+    message: "Hardcoded internal/loopback URL — potential DNS rebinding or SSRF pivot target"
+    languages: [python, javascript, typescript]
+    severity: WARNING
+
+  - id: mcpb-metadata-service-access
+    pattern-regex: '169\.254\.169\.254'
+    message: "Access to cloud metadata service IP (169.254.169.254) — credential theft risk"
+    languages: [python, javascript, typescript]
+    severity: ERROR
+
+  # ── Open Redirect ───────────────────────────────────────────────────────────
+
+  - id: mcpb-open-redirect-flask
+    patterns:
+      - pattern: redirect($URL)
+      - pattern-not: redirect("...", ...)
+    message: "redirect() with dynamic URL — open redirect vulnerability"
+    languages: [python]
+    severity: WARNING
+
+  # ── JavaScript / TypeScript SSRF ────────────────────────────────────────────
+
+  - id: mcpb-js-ssrf-fetch
+    patterns:
+      - pattern: fetch($URL, ...)
+      - pattern-not: fetch("...", ...)
+    message: "fetch() with dynamic URL — SSRF risk if URL is attacker-controlled"
+    languages: [javascript, typescript]
+    severity: WARNING
+
+  - id: mcpb-js-ssrf-axios-get
+    patterns:
+      - pattern: axios.get($URL, ...)
+      - pattern-not: axios.get("...", ...)
+    message: "axios.get() with dynamic URL — SSRF risk if URL is attacker-controlled"
+    languages: [javascript, typescript]
+    severity: WARNING
+
+  - id: mcpb-js-ssrf-axios-request
+    patterns:
+      - pattern: |
+          axios({url: $URL, ...})
+      - pattern-not: |
+          axios({url: "...", ...})
+    message: "axios() with dynamic URL — SSRF risk if URL is attacker-controlled"
+    languages: [javascript, typescript]
+    severity: WARNING
+
+  # ── Path Traversal ──────────────────────────────────────────────────────────
+
+  - id: mcpb-path-traversal-open
+    patterns:
+      - pattern: open(os.path.join($BASE, $USER_INPUT), ...)
+      - pattern-not: open(os.path.join("...", "..."), ...)
+    message: "open() with joined dynamic path — path traversal risk without normalization"
+    languages: [python]
+    severity: WARNING
+
+  - id: mcpb-path-traversal-pathlib
+    patterns:
+      - pattern: ($P / $USER_INPUT).read_text(...)
+      - pattern: ($P / $USER_INPUT).open(...)
+    message: "Pathlib path join with dynamic segment — verify path is confined to expected directory"
+    languages: [python]
+    severity: WARNING
