@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""MCPB Security Scanner — CLI entry point.
+"""MCP Security Scanner — CLI entry point.
 
 用法：
     python scanner.py scan ./target.mcpb
+    python scanner.py scan ./remote-mcp-server.zip
+    python scanner.py scan ./remote-mcp-server/
     python scanner.py scan ./target.mcpb --output report.pdf
-    python scanner.py scan ./target.mcpb --output report.md
     python scanner.py scan ./target.mcpb --skip virustotal semgrep
 """
 
@@ -28,7 +29,7 @@ from rich.rule import Rule
 from rich.table import Table
 from rich import box
 
-from modules.extractor import extract_mcpb, cleanup
+from modules.extractor import extract_mcpb, scan_directory, cleanup
 from modules.trivy import run_trivy
 from modules.virustotal import scan_virustotal
 from modules.semgrep import run_semgrep
@@ -316,12 +317,15 @@ def build_markdown_report(
     verdict: str, now: str,
 ) -> str:
     verdict_icon = {"通過": "✅", "需要審查": "⚠️", "拒絕": "❌"}.get(verdict, "")
+    is_remote = info.scan_mode == "remote"
+    report_title = "MCP Server 安全掃描報告" if is_remote else "MCPB 安全掃描報告"
+    target_label = "目錄" if not info._is_temp and info.extract_dir == info.file_path else "檔案"
     lines: list[str] = []
 
     lines += [
-        "# MCPB 安全掃描報告",
+        f"# {report_title}",
         "",
-        f"**檔案**：`{_md_escape(info.file_path.name)}`  ",
+        f"**{target_label}**：`{_md_escape(info.file_path.name)}`  ",
         f"**SHA256**：`{info.sha256}`  ",
         f"**掃描時間**：{now}  ",
         "",
@@ -524,23 +528,37 @@ def save_report(md_content: str, output_path: str) -> None:
 # ─── 主掃描流程 ────────────────────────────────────────────────────────────────
 
 def cmd_scan(args):
-    mcpb_path = args.file
+    target_path = args.file
     skip = set(args.skip)
     output = args.output
+    is_directory = Path(target_path).is_dir()
 
+    title = "MCP 安全掃描工具" if is_directory else "MCPB 安全掃描工具"
     console.print()
     console.print(Panel(
-        f"[bold]MCPB 安全掃描工具[/bold]\n[dim]{mcpb_path}[/dim]",
+        f"[bold]{title}[/bold]\n[dim]{target_path}[/dim]",
         border_style="blue",
     ))
 
-    console.print("\n[bold]解壓縮 MCPB...[/bold]", end=" ")
-    try:
-        info = extract_mcpb(mcpb_path)
-    except (FileNotFoundError, ValueError) as e:
-        console.print(f"[red]失敗[/red]\n{e}")
-        sys.exit(1)
+    if is_directory:
+        console.print("\n[bold]讀取原始碼目錄...[/bold]", end=" ")
+        try:
+            info = scan_directory(target_path)
+        except (FileNotFoundError, ValueError) as e:
+            console.print(f"[red]失敗[/red]\n{e}")
+            sys.exit(1)
+    else:
+        console.print("\n[bold]解壓縮檔案...[/bold]", end=" ")
+        try:
+            info = extract_mcpb(target_path)
+        except (FileNotFoundError, ValueError) as e:
+            console.print(f"[red]失敗[/red]\n{e}")
+            sys.exit(1)
     console.print("[green]完成[/green]")
+
+    # Remote 模式下自動略過 VirusTotal（無單檔可查）
+    if info.scan_mode == "remote" and "virustotal" not in skip:
+        skip.add("virustotal")
 
     m = info.manifest
     console.print(f"  名稱     : {m.get('display_name', m.get('name', '?'))}")
@@ -726,16 +744,17 @@ def main():
         epilog=textwrap.dedent("""\
             範例：
               python scanner.py scan ./target.mcpb
+              python scanner.py scan ./remote-server.zip
+              python scanner.py scan ./remote-mcp-server/
               python scanner.py scan ./target.mcpb --output report.pdf
-              python scanner.py scan ./target.mcpb --output report.md
               python scanner.py scan ./target.mcpb --skip virustotal
               python scanner.py scan ./target.mcpb --skip ai trivy bandit
         """),
     )
     subparsers = parser.add_subparsers(dest="command")
 
-    scan_p = subparsers.add_parser("scan", help="掃描 MCPB 檔案")
-    scan_p.add_argument("file", help=".mcpb 檔案路徑")
+    scan_p = subparsers.add_parser("scan", help="掃描 MCPB / ZIP 檔案或原始碼目錄")
+    scan_p.add_argument("file", help=".mcpb / .zip 檔案路徑，或原始碼目錄路徑")
     scan_p.add_argument(
         "--output", "-o", metavar="FILE",
         help="將報告儲存至指定路徑（.md 或 .pdf）",
